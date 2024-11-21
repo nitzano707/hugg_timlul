@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>תמלול אודיו בעברית</title>
-    <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.15.1"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -77,19 +76,6 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        #progress {
-            margin-top: 1rem;
-            background-color: #f0f0f0;
-            border-radius: 4px;
-            overflow: hidden;
-            display: none;
-        }
-        #progress-bar {
-            width: 0%;
-            height: 20px;
-            background-color: #3498db;
-            transition: width 0.3s ease;
-        }
     </style>
 </head>
 <body>
@@ -103,36 +89,18 @@
 
         <button id="transcribeBtn" disabled>תמלל</button>
         
-        <div id="progress">
-            <div id="progress-bar"></div>
-        </div>
         <div class="status" id="status"></div>
         <div id="transcription"></div>
     </div>
 
     <script>
-        let pipeline;
-        
-        // טעינת המודל מראש
-        async function loadModel() {
-            try {
-                pipeline = await window.pipeline('automatic-speech-recognition', 'Xenova/whisper-small');
-                console.log('Model loaded successfully');
-            } catch (error) {
-                console.error('Error loading model:', error);
-                status.textContent = 'שגיאה בטעינת המודל. אנא רענן את הדף.';
-            }
-        }
-
-        // טעינת המודל בעת טעינת הדף
-        loadModel();
+        const API_URL = 'https://api-inference.huggingface.co/models/openai/whisper-large-v3';
+        const API_KEY = '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'; // החלף עם המפתח שלך
 
         const fileInput = document.getElementById('fileInput');
         const transcribeBtn = document.getElementById('transcribeBtn');
         const status = document.getElementById('status');
         const transcription = document.getElementById('transcription');
-        const progress = document.getElementById('progress');
-        const progressBar = document.getElementById('progress-bar');
         let selectedFile = null;
 
         fileInput.addEventListener('change', (e) => {
@@ -168,33 +136,40 @@
         });
 
         transcribeBtn.addEventListener('click', async () => {
-            if (!selectedFile || !pipeline) return;
+            if (!selectedFile) return;
 
             try {
                 status.innerHTML = '<div class="loading"></div> מתחיל בתמלול...';
                 transcribeBtn.disabled = true;
                 transcription.textContent = '';
-                progress.style.display = 'block';
-                progressBar.style.width = '0%';
 
-                const result = await pipeline(selectedFile, {
-                    callback_function: (progress) => {
-                        progressBar.style.width = `${progress * 100}%`;
-                    }
+                const formData = new FormData();
+                formData.append('audio', selectedFile);
+
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${API_KEY}`
+                    },
+                    body: selectedFile // שולחים את הקובץ ישירות
                 });
 
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
                 if (result && result.text) {
                     transcription.textContent = result.text;
                     status.textContent = 'התמלול הושלם בהצלחה!';
                 } else {
-                    throw new Error('תגובה לא תקינה מהמודל');
+                    throw new Error('תגובה לא תקינה מהשרת');
                 }
             } catch (error) {
                 console.error('Error:', error);
                 status.textContent = 'אירעה שגיאה בתמלול. אנא נסה שוב.';
             } finally {
                 transcribeBtn.disabled = false;
-                progress.style.display = 'none';
             }
         });
     </script>
