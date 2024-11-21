@@ -141,15 +141,27 @@
                 transcribeBtn.disabled = true;
                 transcription.textContent = '';
 
-                const formData = new FormData();
-                formData.append('audio', selectedFile);
-                formData.append('task', 'transcribe');
+                // קריאת הקובץ כ-ArrayBuffer
+                const fileBuffer = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsArrayBuffer(selectedFile);
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                });
 
-                const response = await axios.post('https://api-inference.huggingface.co/models/hf-audio/whisper-large-v3', 
+                // יצירת Blob מה-ArrayBuffer
+                const audioBlob = new Blob([fileBuffer], { type: selectedFile.type });
+
+                const formData = new FormData();
+                formData.append('file', audioBlob, selectedFile.name);
+                formData.append('model', 'whisper-1');
+
+                const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', 
                     formData,
                     {
                         headers: {
-                            'Authorization': 'Bearer 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'
+                            'Authorization': 'Bearer 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',
+                            'Content-Type': 'multipart/form-data'
                         }
                     }
                 );
@@ -163,6 +175,9 @@
             } catch (error) {
                 console.error('Error:', error);
                 status.textContent = 'אירעה שגיאה בתמלול. אנא נסה שוב.';
+                if (error.response) {
+                    console.error('Error response:', error.response.data);
+                }
             } finally {
                 transcribeBtn.disabled = false;
             }
