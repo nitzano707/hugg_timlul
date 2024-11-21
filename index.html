@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>תמלול אודיו בעברית</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.2/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.15.1"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -77,6 +77,19 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        #progress {
+            margin-top: 1rem;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            overflow: hidden;
+            display: none;
+        }
+        #progress-bar {
+            width: 0%;
+            height: 20px;
+            background-color: #3498db;
+            transition: width 0.3s ease;
+        }
     </style>
 </head>
 <body>
@@ -90,15 +103,36 @@
 
         <button id="transcribeBtn" disabled>תמלל</button>
         
+        <div id="progress">
+            <div id="progress-bar"></div>
+        </div>
         <div class="status" id="status"></div>
         <div id="transcription"></div>
     </div>
 
     <script>
+        let pipeline;
+        
+        // טעינת המודל מראש
+        async function loadModel() {
+            try {
+                pipeline = await window.pipeline('automatic-speech-recognition', 'Xenova/whisper-small');
+                console.log('Model loaded successfully');
+            } catch (error) {
+                console.error('Error loading model:', error);
+                status.textContent = 'שגיאה בטעינת המודל. אנא רענן את הדף.';
+            }
+        }
+
+        // טעינת המודל בעת טעינת הדף
+        loadModel();
+
         const fileInput = document.getElementById('fileInput');
         const transcribeBtn = document.getElementById('transcribeBtn');
         const status = document.getElementById('status');
         const transcription = document.getElementById('transcription');
+        const progress = document.getElementById('progress');
+        const progressBar = document.getElementById('progress-bar');
         let selectedFile = null;
 
         fileInput.addEventListener('change', (e) => {
@@ -134,52 +168,33 @@
         });
 
         transcribeBtn.addEventListener('click', async () => {
-            if (!selectedFile) return;
+            if (!selectedFile || !pipeline) return;
 
             try {
                 status.innerHTML = '<div class="loading"></div> מתחיל בתמלול...';
                 transcribeBtn.disabled = true;
                 transcription.textContent = '';
+                progress.style.display = 'block';
+                progressBar.style.width = '0%';
 
-                // קריאת הקובץ כ-ArrayBuffer
-                const fileBuffer = await new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.readAsArrayBuffer(selectedFile);
-                    reader.onload = () => resolve(reader.result);
-                    reader.onerror = reject;
+                const result = await pipeline(selectedFile, {
+                    callback_function: (progress) => {
+                        progressBar.style.width = `${progress * 100}%`;
+                    }
                 });
 
-                // יצירת Blob מה-ArrayBuffer
-                const audioBlob = new Blob([fileBuffer], { type: selectedFile.type });
-
-                const formData = new FormData();
-                formData.append('file', audioBlob, selectedFile.name);
-                formData.append('model', 'whisper-1');
-
-                const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', 
-                    formData,
-                    {
-                        headers: {
-                            'Authorization': 'Bearer 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',
-                            'Content-Type': 'multipart/form-data'
-                        }
-                    }
-                );
-
-                if (response.data && response.data.text) {
-                    transcription.textContent = response.data.text;
+                if (result && result.text) {
+                    transcription.textContent = result.text;
                     status.textContent = 'התמלול הושלם בהצלחה!';
                 } else {
-                    throw new Error('תגובה לא תקינה מהשרת');
+                    throw new Error('תגובה לא תקינה מהמודל');
                 }
             } catch (error) {
                 console.error('Error:', error);
                 status.textContent = 'אירעה שגיאה בתמלול. אנא נסה שוב.';
-                if (error.response) {
-                    console.error('Error response:', error.response.data);
-                }
             } finally {
                 transcribeBtn.disabled = false;
+                progress.style.display = 'none';
             }
         });
     </script>
